@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import copy
 import random
@@ -6,9 +7,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from multiprocessing import Process, Queue
 
-from __future__ import print_function
 
-import numpy as np
 def random_neq(l, r, s):
     t = np.random.randint(l, r)
     while t in s:
@@ -214,7 +213,6 @@ def evaluate(model, dataset, args, sess):
     else:
         users = range(1, usernum + 1)
     for u in users:
-
         if len(train[u]) < 1 or len(test[u]) < 1: continue
 
         seq = np.zeros([args.maxlen], dtype=np.int32)
@@ -252,7 +250,7 @@ def evaluate(model, dataset, args, sess):
             NDCG += 1 / np.log2(rank + 2)
             HT += 1
         if valid_user % 100 == 0:
-            print '.',
+            print('.', end='')
             sys.stdout.flush()
 
     return NDCG / valid_user, HT / valid_user
@@ -301,7 +299,7 @@ def evaluate_valid(model, dataset, args, sess):
             NDCG += 1 / np.log2(rank + 2)
             HT += 1
         if valid_user % 100 == 0:
-            print '.',
+            print('.', end='')
             sys.stdout.flush()
 
     return NDCG / valid_user, HT / valid_user
