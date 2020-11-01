@@ -1,3 +1,7 @@
+For debugging the well-know issue of performance over-estimation addressed in https://www.kdd.org/kdd2020/accepted-papers/view/on-sampled-metrics-for-item-recommendation, SASRec&TiSASRec are still good with high speed and accurate prediction, we are just trying to make it better without negative sampling based evaluation.
+
+---
+
 # TiSASRec: Time Interval Aware Self-Attention for Sequential Recommendation
 
 This is our TensorFlow implementation for the paper:

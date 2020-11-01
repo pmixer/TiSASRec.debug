@@ -77,9 +77,11 @@ try:
             print('Evaluating')
             t_test = evaluate(model, dataset, args, sess)
             t_valid = evaluate_valid(model, dataset, args, sess)
+            t_test_all = evaluate_all_items(model, dataset, args, sess)
+            # t_test_all_older_version = evaluate_all_items_older_version(model, dataset, args, sess)
             print('')
-            print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f)' % (
-            epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1]))
+            # print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f)' % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1]))
+            print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f), test_all (NDCG@10: %.4f, HR@10: %.4f)' % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1], t_test_all[0], t_test_all[1]))
 
             t0 = time.time()
 except:
