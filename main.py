@@ -107,8 +107,9 @@ for epoch in range(epoch_start_idx, args.num_epochs + 1):
         print('Evaluating', end='')
         t_test = evaluate(model, dataset, args)
         t_valid = evaluate_valid(model, dataset, args)
-        print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f)'
-                % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1]))
+        t_test_all_items = evaluate_all_items(model, dataset, args)
+        print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f), test_all_items (NDCG@10: %.4f, HR@10: %.4f)'
+                % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1], t_test_all_items[0], t_test_all_items[1]))
 
         f.write(str(t_valid) + ' ' + str(t_test) + '\n')
         f.flush()
