@@ -7,6 +7,7 @@ from tqdm import tqdm
 from util import *
 import pickle
 
+tf.set_random_seed(0)
 
 def str2bool(s):
     if s not in {'False', 'True'}:
@@ -36,7 +37,7 @@ with open(os.path.join(args.dataset + '_' + args.train_dir, 'args.txt'), 'w') as
 f.close()
 
 dataset = data_partition(args.dataset)
-[user_train, user_valid, user_test, usernum, itemnum, timenum] = dataset
+[user_train, user_test, usernum, itemnum, timenum] = dataset
 
 model = Model(usernum, itemnum, timenum,args)
 print('User: %d, Item: %d:, Timenum: %d'%(usernum, itemnum, timenum))
@@ -58,7 +59,8 @@ except:
     relation_matrix = Relation(user_train, usernum, args.maxlen, args.time_span)
     pickle.dump(relation_matrix, open('data/relation_matrix_%s_%d_%d.pickle'%(args.dataset, args.maxlen, args.time_span),'wb'))
 
-sampler = WarpSampler(user_train, usernum, itemnum, relation_matrix, batch_size=args.batch_size, maxlen=args.maxlen, n_workers=3)
+# be sure to set n_workers=1, for unset multi-processing to rm randomness
+sampler = WarpSampler(user_train, usernum, itemnum, relation_matrix, batch_size=args.batch_size, maxlen=args.maxlen, n_workers=1)
 T = 0.0
 t0 = time.time()
 try:
@@ -75,13 +77,9 @@ try:
             t1 = time.time() - t0
             T += t1
             print('Evaluating')
-            t_test = evaluate(model, dataset, args, sess)
-            t_valid = evaluate_valid(model, dataset, args, sess)
             t_test_all = evaluate_all_items(model, dataset, args, sess)
-            # t_test_all_older_version = evaluate_all_items_older_version(model, dataset, args, sess)
             print('')
-            # print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f)' % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1]))
-            print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f), test_all (NDCG@10: %.4f, HR@10: %.4f)' % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1], t_test_all[0], t_test_all[1]))
+            print('epoch:%d, time: %f(s), test_all (NDCG@10: %.4f, MRR: %.4f, HR@10: %.4f)' % (epoch, T, t_test_all[0], t_test_all[1], t_test_all[2]))
 
             t0 = time.time()
 except:

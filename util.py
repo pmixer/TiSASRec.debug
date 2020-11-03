@@ -7,12 +7,16 @@ from tqdm import tqdm
 from collections import defaultdict
 from multiprocessing import Process, Queue
 
+random.seed(0)
+np.random.seed(0)
+
 
 def random_neq(l, r, s):
     t = np.random.randint(l, r)
     while t in s:
         t = np.random.randint(l, r)
     return t
+
 
 def computeRePos(time_seq, time_span):
     
@@ -27,6 +31,7 @@ def computeRePos(time_seq, time_span):
                 time_matrix[i][j] = span
     return time_matrix
 
+
 def Relation(user_train, usernum, maxlen, time_span):
     data_train = dict()
     for user in tqdm(range(1, usernum+1), desc='Preparing relation matrix'):
@@ -38,6 +43,7 @@ def Relation(user_train, usernum, maxlen, time_span):
             if idx == -1: break
         data_train[user] = computeRePos(time_seq, time_span)
     return data_train
+
 
 def sample_function(user_train, usernum, itemnum, batch_size, maxlen, relation_matrix, result_queue, SEED):
     def sample(user):
@@ -61,15 +67,18 @@ def sample_function(user_train, usernum, itemnum, batch_size, maxlen, relation_m
         time_matrix = relation_matrix[user]
         return (user, seq, time_seq, time_matrix, pos, neg)
 
-    np.random.seed(SEED)
+    # np.random.seed(SEED)
     while True:
         one_batch = []
+        uid = -1
         for i in range(batch_size):
-            user = np.random.randint(1, usernum + 1)
-            while len(user_train[user]) <= 1: user = np.random.randint(1, usernum + 1)
-            one_batch.append(sample(user))
+            # user = np.random.randint(1, usernum + 1)
+            uid = (uid + 1) % usernum
+            while len(user_train[uid+1]) <= 1: uid = (uid + 1) % usernum # user = np.random.randint(1, usernum + 1)
+            one_batch.append(sample(uid+1)) # user as 1 indexed, corresponds to uid + 1
 
         result_queue.put(zip(*one_batch))
+
 
 class WarpSampler(object):
     def __init__(self, User, usernum, itemnum, relation_matrix, batch_size=64, maxlen=10,n_workers=1):
@@ -97,12 +106,14 @@ class WarpSampler(object):
             p.terminate()
             p.join()
 
+
 def timeSlice(time_set):
     time_min = min(time_set)
     time_map = dict()
     for time in time_set:
         time_map[time] = int(round(float(time-time_min)))
     return time_map
+
 
 def cleanAndsort(User, time_map):
     User_filted = dict()
@@ -144,12 +155,12 @@ def cleanAndsort(User, time_map):
 
     return User_res, len(user_set), len(item_set), max(time_max)
 
+
 def data_partition(fname):
     usernum = 0
     itemnum = 0
     User = defaultdict(list)
     user_train = {}
-    user_valid = {}
     user_test = {}
     
     print('Preparing data...')
@@ -187,225 +198,68 @@ def data_partition(fname):
 
     for user in User:
         nfeedback = len(User[user])
-        if nfeedback < 3:
+        if nfeedback < 2:
             user_train[user] = User[user]
-            user_valid[user] = []
             user_test[user] = []
         else:
-            user_train[user] = User[user][:-2]
-            user_valid[user] = []
-            user_valid[user].append(User[user][-2])
-            user_test[user] = []
-            user_test[user].append(User[user][-1])
+            seq_len = len(User[user])
+            test_sz = int(seq_len / 10)
+            if test_sz == 0: test_sz += 1
+            user_train[user] = User[user][:-test_sz]
+            user_test[user] = User[user][-test_sz:]
     print('Preparing done...')
-    return [user_train, user_valid, user_test, usernum, itemnum, timenum]
-
-
-def evaluate(model, dataset, args, sess):
-    [train, valid, test, usernum, itemnum, timenum] = copy.deepcopy(dataset)
-
-    NDCG = 0.0
-    HT = 0.0
-    valid_user = 0.0
-
-    if usernum>10000:
-        users = random.sample(range(1, usernum + 1), 10000)
-    else:
-        users = range(1, usernum + 1)
-    for u in users:
-        if len(train[u]) < 1 or len(test[u]) < 1: continue
-
-        seq = np.zeros([args.maxlen], dtype=np.int32)
-        time_seq = np.zeros([args.maxlen], dtype=np.int32)
-        idx = args.maxlen - 1
-        
-        seq[idx] = valid[u][0][0]
-        time_seq[idx] = valid[u][0][1]
-        idx -= 1
-        for i in reversed(train[u]):
-            seq[idx] = i[0]
-            time_seq[idx] = i[1]
-            idx -= 1
-            if idx == -1: break
-        rated = set(map(lambda x: x[0],train[u]))
-        rated.add(valid[u][0][0])
-        rated.add(test[u][0][0])
-        rated.add(0)
-        item_idx = [test[u][0][0]]
-        for _ in range(100):
-            t = np.random.randint(1, itemnum + 1)
-            while t in rated: t = np.random.randint(1, itemnum + 1)
-            item_idx.append(t)
-
-        time_matrix = computeRePos(time_seq, args.time_span)
-
-        predictions = -model.predict(sess, [u], [seq], [time_matrix],item_idx)
-        predictions = predictions[0]
-
-        rank = predictions.argsort().argsort()[0]
-
-        valid_user += 1
-
-        if rank < 10:
-            NDCG += 1 / np.log2(rank + 2)
-            HT += 1
-        if valid_user % 100 == 0:
-            print('.', end='')
-            sys.stdout.flush()
-
-    return NDCG / valid_user, HT / valid_user
-
-
-def evaluate_valid(model, dataset, args, sess):
-    [train, valid, test, usernum, itemnum, timenum] = copy.deepcopy(dataset)
-
-    NDCG = 0.0
-    valid_user = 0.0
-    HT = 0.0
-    if usernum>10000:
-        users = random.sample(range(1, usernum + 1), 10000)
-    else:
-        users = range(1, usernum + 1)
-    for u in users:
-        if len(train[u]) < 1 or len(valid[u]) < 1: continue
-
-        seq = np.zeros([args.maxlen], dtype=np.int32)
-        time_seq = np.zeros([args.maxlen], dtype=np.int32)
-        idx = args.maxlen - 1
-        for i in reversed(train[u]):
-            seq[idx] = i[0]
-            time_seq[idx] = i[1]
-            idx -= 1
-            if idx == -1: break
-
-        rated = set(map(lambda x: x[0], train[u]))
-        rated.add(valid[u][0][0])
-        rated.add(0)
-        item_idx = [valid[u][0][0]]
-        for _ in range(100):
-            t = np.random.randint(1, itemnum + 1)
-            while t in rated: t = np.random.randint(1, itemnum + 1)
-            item_idx.append(t)
-
-        time_matrix = computeRePos(time_seq, args.time_span)
-        predictions = -model.predict(sess, [u], [seq], [time_matrix],item_idx)
-        predictions = predictions[0]
-
-        rank = predictions.argsort().argsort()[0]
-
-        valid_user += 1
-
-        if rank < 10:
-            NDCG += 1 / np.log2(rank + 2)
-            HT += 1
-        if valid_user % 100 == 0:
-            print('.', end='')
-            sys.stdout.flush()
-
-    return NDCG / valid_user, HT / valid_user
-
-
-def evaluate_all_items_buggy_version(model, dataset, args, sess):
-    [train, valid, test, usernum, itemnum] = copy.deepcopy(dataset)
-
-    NDCG = 0.0
-    HT = 0.0
-    valid_user = 0.0
-
-    users = xrange(1, usernum + 1)
-    for u in users:
-        # print("evaluating user " + str(u))
-        if len(train[u]) < 1 or len(test[u]) < 1: continue
-
-        seq = np.zeros([args.maxlen], dtype=np.int32)
-        idx = args.maxlen - 1
-        seq[idx] = valid[u][0]
-        idx -= 1
-        for i in reversed(train[u]):
-            seq[idx] = i
-            idx -= 1
-            if idx == -1: break
-        rated = set(train[u])
-        rated.add(0)
-        target_idx = test[u][0]
-        item_indices = list(range(1, itemnum + 1))
-
-        print('older version processed user: ', str(u))
-
-        predictions = -model.predict(sess, [u], [seq], item_indices)
-        predictions = predictions[0] # dim due to tf's batch exec
-
-        rank = predictions.argsort().argsort()[target_idx-1]
-
-        valid_user += 1
-
-        NDCG += 1 / np.log2(rank + 2)
-        if rank < 10:
-            HT += 1
-        if valid_user % 100 == 0:
-            print('.', end='')
-            sys.stdout.flush()
-
-    return NDCG / valid_user, HT / valid_user
+    return [user_train, user_test, usernum, itemnum, timenum]
 
 
 def evaluate_all_items(model, dataset, args, sess):
-    [train, valid, test, usernum, itemnum, timenum] = copy.deepcopy(dataset)
+    [train, test, usernum, itemnum, timenum] = copy.deepcopy(dataset)
 
     NDCG = 0.0
+    MRR = 0.0
     HT = 0.0
-    valid_user = 0.0
+    tested_seq_num = 0.0
 
-    if usernum>10000:
-        users = random.sample(range(1, usernum + 1), 10000)
-    else:
-        users = range(1, usernum + 1)
+    users = range(1, usernum + 1)
     for u in users:
-        # print('new version need to process user: ', str(u))
         if len(train[u]) < 1 or len(test[u]) < 1: continue
 
         seq = np.zeros([args.maxlen], dtype=np.int32)
         time_seq = np.zeros([args.maxlen], dtype=np.int32)
         idx = args.maxlen - 1
-        
-        seq[idx] = valid[u][0][0]
-        time_seq[idx] = valid[u][0][1]
-        idx -= 1
+
         for i in reversed(train[u]):
             seq[idx] = i[0]
             time_seq[idx] = i[1]
             idx -= 1
             if idx == -1: break
-        rated = set(map(lambda x: x[0],train[u]))
-        rated.add(valid[u][0][0])
-        rated.add(test[u][0][0])
-        rated.add(0)
-        item_idx = [test[u][0][0]]
-        # for _ in range(100):
-            # t = np.random.randint(1, itemnum + 1)
-            # while t in rated: t = np.random.randint(1, itemnum + 1)
-            # item_idx.append(t)
-        for i in range(1, itemnum+1):
-            if i != test[u][0][0]:
-                item_idx.append(i)
 
-        time_matrix = computeRePos(time_seq, args.time_span)
-        predictions = -model.predict(sess, [u], [seq], [time_matrix],item_idx)
-        predictions = predictions[0]
+        for test_id in range(len(test[u])):
+            if test_id > 0:
+                seq[:-1] = seq[1:]
+                seq[-1] = test[u][test_id-1][0]
+                time_seq[:-1] = time_seq[1:]
+                time_seq[-1] = test[u][test_id-1][1]
+
+            item_idx = [test[u][test_id][0]]
+            for i in range(1, itemnum+1):
+                if i != test[u][test_id][0]:
+                    item_idx.append(i)
+
+            time_matrix = computeRePos(time_seq, args.time_span)
+            predictions = -model.predict(sess, [u], [seq], [time_matrix],item_idx)
+            predictions = predictions[0]
 
         
-        rank = predictions.argsort().argsort()[0]
+            rank = predictions.argsort().argsort()[0]
 
-        valid_user += 1
+            tested_seq_num += 1
 
-        if rank < 10:
-            NDCG += 1 / np.log2(rank + 2)
-            HT += 1
-        if valid_user % 100 == 0:
-            print('.', end='')
-            sys.stdout.flush()
-        # print('new version processed user: ', str(u))
+            MRR += 1 / (rank + 1.0)
+            if rank < 10:
+                NDCG += 1 / np.log2(rank + 2)
+                HT += 1
+            if tested_seq_num % 100 == 0:
+                print('.', end='')
+                sys.stdout.flush()
 
-    # print('returned info')
-    return NDCG / valid_user, HT / valid_user
-
+    return NDCG / tested_seq_num, MRR / tested_seq_num,  HT / tested_seq_num
