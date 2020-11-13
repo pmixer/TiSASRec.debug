@@ -55,6 +55,14 @@ except:
 
 sampler = WarpSampler(user_train, usernum, itemnum, relation_matrix, batch_size=args.batch_size, maxlen=args.maxlen, n_workers=3)
 model = TiSASRec(usernum, itemnum, itemnum, args).to(args.device)
+
+
+for name, param in model.named_parameters():
+    try:
+        torch.nn.init.xavier_uniform_(param.data)
+    except:
+        pass # just ignore those failed init layers
+
 model.train() # enable model training
 
 epoch_start_idx = 1
