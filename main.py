@@ -38,14 +38,12 @@ with open(os.path.join(args.dataset + '_' + args.train_dir, 'args.txt'), 'w') as
 f.close()
 
 dataset = data_partition(args.dataset)
-[user_train, user_valid, user_test, usernum, itemnum, timenum] = dataset
+[user_train, user_test, usernum, itemnum, timenum] = dataset
 num_batch = len(user_train) // args.batch_size
 cc = 0.0
 for u in user_train:
     cc += len(user_train[u])
 print('average sequence length: %.2f' % (cc / len(user_train)))
-
-f = open(os.path.join(args.dataset + '_' + args.train_dir, 'log.txt'), 'w')
 
 try:
     relation_matrix = pickle.load(open('data/relation_matrix_%s_%d_%d.pickle'%(args.dataset, args.maxlen, args.time_span),'rb'))
@@ -53,8 +51,16 @@ except:
     relation_matrix = Relation(user_train, usernum, args.maxlen, args.time_span)
     pickle.dump(relation_matrix, open('data/relation_matrix_%s_%d_%d.pickle'%(args.dataset, args.maxlen, args.time_span),'wb'))
 
-sampler = WarpSampler(user_train, usernum, itemnum, relation_matrix, batch_size=args.batch_size, maxlen=args.maxlen, n_workers=3)
+# set n_workers=1, for unset multi-processing to rm randomness
+sampler = WarpSampler(user_train, usernum, itemnum, relation_matrix, batch_size=args.batch_size, maxlen=args.maxlen, n_workers=1)
 model = TiSASRec(usernum, itemnum, itemnum, args).to(args.device)
+
+for name, param in model.named_parameters():
+    try:
+        torch.nn.init.xavier_uniform_(param.data)
+    except:
+        pass # just ignore those failed init layers
+
 model.train() # enable model training
 
 epoch_start_idx = 1
@@ -105,14 +111,9 @@ for epoch in range(epoch_start_idx, args.num_epochs + 1):
         t1 = time.time() - t0
         T += t1
         print('Evaluating', end='')
-        t_test = evaluate(model, dataset, args)
-        t_valid = evaluate_valid(model, dataset, args)
-        t_test_all_items = evaluate_all_items(model, dataset, args)
-        print('epoch:%d, time: %f(s), valid (NDCG@10: %.4f, HR@10: %.4f), test (NDCG@10: %.4f, HR@10: %.4f), test_all_items (NDCG@10: %.4f, HR@10: %.4f)'
-                % (epoch, T, t_valid[0], t_valid[1], t_test[0], t_test[1], t_test_all_items[0], t_test_all_items[1]))
+        t_test_all = evaluate_all_items(model, dataset, args)
+        print('epoch:%d, time: %f(s), test_all (NDCG@10: %.4f, MRR: %.4f, HR@10: %.4f)' % (epoch, T, t_test_all[0], t_test_all[1], t_test_all[2]))
 
-        f.write(str(t_valid) + ' ' + str(t_test) + '\n')
-        f.flush()
         t0 = time.time()
         model.train()
 
